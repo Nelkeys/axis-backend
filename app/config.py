@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     workos_redirect_uri: str
     frontend_url: str = "http://localhost:5500"
     paystack_secret_key: str
+    cron_secret_key: str
 
     class Config:
         env_file = ".env"
