@@ -7,6 +7,7 @@ from app.models.quiz import Quiz, Question
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
 from app.schemas.quiz import QuizCreateRequest, QuestionCreateRequest, QuestionAdminResponse
+from app.schemas.admin import QuestionUpdateRequest, QuizUpdateRequest
 
 router = APIRouter(prefix="/admin", tags=["Admin Quiz"])
 
@@ -58,3 +59,70 @@ def add_question(
     db.commit()
     db.refresh(question)
     return question
+
+
+
+@router.patch("/quizzes/{quiz_id}")
+def update_quiz(
+    quiz_id: int,
+    data: QuizUpdateRequest,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Update quiz time limit."""
+    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    if data.time_limit_minutes is not None:
+        quiz.time_limit_minutes = data.time_limit_minutes
+
+    db.commit()
+    db.refresh(quiz)
+    return {"quiz_id": quiz.id, "time_limit_minutes": quiz.time_limit_minutes}
+
+
+@router.patch("/questions/{question_id}", response_model=QuestionAdminResponse)
+def update_question(
+    question_id: int,
+    data: QuestionUpdateRequest,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Edit a question's text, options, or correct answer."""
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    if data.text is not None:
+        question.text = data.text
+    if data.order is not None:
+        question.order = data.order
+    if data.options is not None:
+        question.options = data.options
+    if data.correct_index is not None:
+        # Validate against options if options are also being updated
+        options = data.options if data.options is not None else question.options
+        if data.correct_index >= len(options):
+            raise HTTPException(status_code=400, detail="correct_index out of range")
+        question.correct_index = data.correct_index
+
+    db.commit()
+    db.refresh(question)
+    return question
+
+
+@router.delete("/questions/{question_id}")
+def delete_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """Remove a question from a quiz."""
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    db.delete(question)
+    db.commit()
+    return {"status": "deleted", "question_id": question_id}

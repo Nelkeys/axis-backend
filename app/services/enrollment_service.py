@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from app.models.enrollment import Enrollment, Progress, EnrollmentStatus
 from app.models.course import Course, CourseVersion
 
+from app.services.notification_service import notify_enrollment_confirmed, notify_access_locked
+
 ACCESS_WINDOW_DAYS = 90
 MAX_RENEWALS_BEFORE_REPURCHASE = 1
 
@@ -39,6 +41,12 @@ def create_enrollment(db: Session, user_id: int, course_id: int) -> Enrollment:
     db.add(enrollment)
     db.commit()
     db.refresh(enrollment)
+
+
+    course = db.query(Course).filter(Course.id == course_id).first()
+    notify_enrollment_confirmed(db, user_id, course.title)
+
+
     return enrollment
 
 
@@ -120,6 +128,12 @@ def expire_stale_enrollments(db: Session) -> int:
     )
     for enrollment in stale:
         enrollment.status = EnrollmentStatus.LOCKED.value
+
+         # Notify the student their access is locked
+        course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+        can_renew = enrollment.renewal_count < MAX_RENEWALS_BEFORE_REPURCHASE
+        notify_access_locked(db, enrollment.user_id, course.title, can_renew)
+
     db.commit()
     return len(stale)
 

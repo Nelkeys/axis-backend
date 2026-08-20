@@ -8,6 +8,12 @@ from app.models.quiz_attempt import QuizAttempt, Certificate, AttemptStatus
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.course import Course
 
+from app.services.notification_service import (
+    notify_quiz_passed,
+    notify_quiz_failed,
+    notify_certificate_issued,
+)
+
 
 def start_quiz(db: Session, enrollment: Enrollment) -> QuizAttempt:
     if enrollment.status not in (EnrollmentStatus.ACTIVE.value, EnrollmentStatus.COMPLETED.value):
@@ -101,8 +107,17 @@ def submit_quiz(db: Session, enrollment: Enrollment, attempt_id: int, answers: l
             db.add(certificate)
             enrollment.status = EnrollmentStatus.COMPLETED.value
             db.commit()
+
+            # Notify: certificate issued
+            notify_certificate_issued(db, enrollment.user_id, course.title, certificate_code)
         else:
             certificate_code = existing_cert.verification_code
+
+        # Notify: quiz passed
+        notify_quiz_passed(db, enrollment.user_id, course.title, score)
+    else:
+        # Notify: quiz failed
+        notify_quiz_failed(db, enrollment.user_id, course.title, score, course.pass_percentage)
 
     return {
         "score": score,
