@@ -7,6 +7,8 @@ from app.models.admin import AdminUser
 from app.core.security import verify_password, create_admin_token
 from app.config import settings
 
+from app.core.dependencies import get_current_admin
+
 router = APIRouter(prefix="/admin/auth", tags=["Admin Auth"])
 
 class AdminLoginRequest(BaseModel):
@@ -32,6 +34,11 @@ def admin_login(data: AdminLoginRequest, response: Response, db: Session = Depen
         max_age=60 * 60 * 8,
     )
     return {"status": "logged in"}
+    
+
+@router.get("/me")
+def get_current_admin_session(current_admin: AdminUser = Depends(get_current_admin)):
+    return {"id": current_admin.id, "email": current_admin.email}
 
 
 @router.post("/logout")
