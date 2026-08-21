@@ -23,6 +23,15 @@ class QuestionAdminResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class QuizAdminDetailResponse(BaseModel):
+    id: int
+    course_id: int
+    time_limit_minutes: int
+    questions: List[QuestionAdminResponse]
+
+    class Config:
+        from_attributes = True
+
 
 # --- Student: taking the quiz — NOTE no correct_index anywhere below ---
 

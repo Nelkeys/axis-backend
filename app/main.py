@@ -38,16 +38,14 @@ app = FastAPI(
 # CORS — allow your frontend origin only
 
 origins = [
-    "http://localhost:3000",       # React/Vite dev server
-    "http://localhost:5173",       # Vite alternative
-    # Add your production frontend URL here when you deploy it:
-    # "https://your-frontend.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,  # Required for httpOnly cookies
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -15,6 +15,16 @@ class TopicResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TopicUpdateRequest(BaseModel):
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    order: Optional[int] = Field(None, ge=1)
+
+class SectionUpdateRequest(BaseModel):
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    order: Optional[int] = Field(None, ge=1)
+    text_content: Optional[str] = Field(None, min_length=10)
+    video_url: Optional[str] = None
+
 
 class SectionCreateRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)

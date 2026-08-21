@@ -6,7 +6,7 @@ from app.models.course import Course
 from app.models.quiz import Quiz, Question
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
-from app.schemas.quiz import QuizCreateRequest, QuestionCreateRequest, QuestionAdminResponse
+from app.schemas.quiz import QuizCreateRequest, QuestionCreateRequest, QuestionAdminResponse, QuizAdminDetailResponse
 from app.schemas.admin import QuestionUpdateRequest, QuizUpdateRequest
 
 router = APIRouter(prefix="/admin", tags=["Admin Quiz"])
@@ -60,6 +60,55 @@ def add_question(
     db.refresh(question)
     return question
 
+
+@router.get("/quizzes/{quiz_id}", response_model=QuizAdminDetailResponse)
+def get_quiz_detail(
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    questions = (
+        db.query(Question)
+        .filter(Question.quiz_id == quiz_id)
+        .order_by(Question.order)
+        .all()
+    )
+
+    return QuizAdminDetailResponse(
+        id=quiz.id,
+        course_id=quiz.course_id,
+        time_limit_minutes=quiz.time_limit_minutes,
+        questions=questions,
+    )
+
+
+@router.get("/courses/{course_id}/quiz", response_model=QuizAdminDetailResponse)
+def get_quiz_by_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    quiz = db.query(Quiz).filter(Quiz.course_id == course_id).first()
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="This course has no quiz yet")
+
+    questions = (
+        db.query(Question)
+        .filter(Question.quiz_id == quiz.id)
+        .order_by(Question.order)
+        .all()
+    )
+
+    return QuizAdminDetailResponse(
+        id=quiz.id,
+        course_id=quiz.course_id,
+        time_limit_minutes=quiz.time_limit_minutes,
+        questions=questions,
+    )
 
 
 @router.patch("/quizzes/{quiz_id}")
