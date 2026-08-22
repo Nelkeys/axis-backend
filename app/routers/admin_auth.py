@@ -30,7 +30,7 @@ def admin_login(data: AdminLoginRequest, response: Response, db: Session = Depen
         value=token,
         httponly=True,
         secure=True,  # required whenever samesite="none" — no dev/prod branching needed since Render is always https
-        samesite="none",
+        samesite="lax",
         max_age=60 * 60 * 8,
     )
     return {"status": "logged in"}
