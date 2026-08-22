@@ -37,7 +37,11 @@ app = FastAPI(
 
 # CORS — allow your frontend origin only
 
-origins = ["*"]
+origins = [
+    "http://localhost:5173",
+    "https://axisedu-admin.onrender.com",
+]
+
 
 app.add_middleware(
     CORSMiddleware,
