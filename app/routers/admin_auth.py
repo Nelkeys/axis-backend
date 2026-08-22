@@ -26,12 +26,12 @@ def admin_login(data: AdminLoginRequest, response: Response, db: Session = Depen
 
     token = create_admin_token(admin.id)
     response.set_cookie(
-        key="admin_token",
-        value=token,
-        httponly=True,
-        secure=settings.environment != "development",
-        samesite="strict",  # stricter than student cookies — admin panel shouldn't be reachable cross-site at all
-        max_age=60 * 60 * 8,
+    key="admin_token",
+    value=token,
+    httponly=True,
+    secure=True,  # required whenever samesite="none" — no dev/prod branching needed since Render is always https
+    samesite="none",
+    max_age=60 * 60 * 8,
     )
     return {"status": "logged in"}
     
