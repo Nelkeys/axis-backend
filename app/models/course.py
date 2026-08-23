@@ -14,7 +14,7 @@ class Course(Base):
     curriculum_tags = Column(ARRAY(String), nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    versions = relationship("CourseVersion", back_populates="course")
+    versions = relationship("CourseVersion", back_populates="course", cascade="all, delete-orphan")
 
 
 class CourseVersion(Base):
