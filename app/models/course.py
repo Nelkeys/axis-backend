@@ -15,6 +15,7 @@ class Course(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     versions = relationship("CourseVersion", back_populates="course", cascade="all, delete-orphan")
+    quiz = relationship("Quiz", back_populates="course", uselist=False, cascade="all, delete-orphan")
 
 
 class CourseVersion(Base):

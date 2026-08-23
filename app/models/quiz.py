@@ -9,7 +9,8 @@ class Quiz(Base):
     course_id = Column(Integer, ForeignKey("courses.id"), nullable=False, unique=True)
     time_limit_minutes = Column(Integer, nullable=False, default=30)
 
-    questions = relationship("Question", back_populates="quiz", order_by="Question.order")
+    course = relationship("Course", back_populates="quiz")
+    questions = relationship("Question", back_populates="quiz", order_by="Question.order", cascade="all, delete-orphan")
 
 
 class Question(Base):
