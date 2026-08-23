@@ -10,6 +10,7 @@ from app.schemas.content import (
     TopicCreateRequest, TopicResponse,
     SectionCreateRequest, SectionResponse, 
     TopicUpdateRequest, SectionUpdateRequest,
+    TopicWithSectionsResponse,
 )
 from app.models.enrollment import Progress
 
@@ -72,13 +73,12 @@ def create_section(
     return section
 
 
-@router.get("/courses/{course_id}/full", response_model=list[TopicResponse])
+@router.get("/courses/{course_id}/full", response_model=list[TopicWithSectionsResponse])
 def get_course_topics(
     course_id: int,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
-    # Quick way to confirm what's been built so far for a course.
     version = (
         db.query(CourseVersion)
         .filter(CourseVersion.course_id == course_id)

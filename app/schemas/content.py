@@ -15,6 +15,7 @@ class TopicResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class TopicUpdateRequest(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=200)
     order: Optional[int] = Field(None, ge=1)
@@ -77,3 +78,7 @@ class StudentCertificateResponse(BaseModel):
     score: int
     verification_code: str
     issued_at: datetime
+
+
+class TopicWithSectionsResponse(TopicResponse):
+    sections: List[SectionResponse] = []
