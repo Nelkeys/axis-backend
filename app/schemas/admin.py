@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from typing import Optional, List
+from datetime import datetime
 
 
 class CourseUpdateRequest(BaseModel):
@@ -26,9 +27,13 @@ class QuizUpdateRequest(BaseModel):
 class EnrollmentAdminResponse(BaseModel):
     id: int
     user_id: int
+    student_email: str
+    student_name: Optional[str] = None
     course_id: int
+    course_title: str
     status: str
     renewal_count: int
+    access_expires_at: datetime
 
     class Config:
         from_attributes = True
