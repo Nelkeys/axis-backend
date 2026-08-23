@@ -11,7 +11,7 @@ class Topic(Base):
     title = Column(String, nullable=False)
 
     course_version = relationship("CourseVersion", back_populates="topics")
-    sections = relationship("Section", back_populates="topic", order_by="Section.order")
+    sections = relationship("Section", back_populates="topic", order_by="Section.order", cascade="all, delete-orphan")
 
 
 class Section(Base):
