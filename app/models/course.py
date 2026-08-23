@@ -26,4 +26,4 @@ class CourseVersion(Base):
     published_at = Column(DateTime(timezone=True), server_default=func.now())
 
     course = relationship("Course", back_populates="versions")
-    topics = relationship("Topic", back_populates="course_version", order_by="Topic.order")
+    topics = relationship("Topic", back_populates="course_version", order_by="Topic.order", cascade="all, delete-orphan")
