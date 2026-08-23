@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.course import Course, CourseVersion
+from app.models.enrollment import Enrollment
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
 from app.schemas.course import CourseCreateRequest, CourseResponse
