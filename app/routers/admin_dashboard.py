@@ -41,17 +41,36 @@ def list_all_enrollments(
     return result
 
 
-@router.get("/students", response_model=list)
+@router.get("/students")
 def list_all_students(
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
-    """Admin view of all registered students."""
     students = db.query(User).all()
-    return [
-        {"id": s.id, "email": s.email, "name": getattr(s, "name", None)}
-        for s in students
-    ]
+
+    result = []
+    for s in students:
+        enrollments = db.query(Enrollment).filter(Enrollment.user_id == s.id).all()
+        enrollment_count = len(enrollments)
+        has_active = any(e.status == EnrollmentStatus.ACTIVE.value for e in enrollments)
+
+        if enrollment_count == 0:
+            status = "new"
+        elif has_active:
+            status = "enrolled"
+        else:
+            status = "inactive"
+
+        result.append({
+            "id": s.id,
+            "email": s.email,
+            "name": getattr(s, "name", None),
+            "created_at": s.created_at,
+            "enrollment_count": enrollment_count,
+            "status": status,
+        })
+
+    return result
 
 
 @router.patch("/enrollments/{enrollment_id}/unlock")
