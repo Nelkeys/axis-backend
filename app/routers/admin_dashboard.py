@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from app.core.audit import log_audit
 from typing import List
 from datetime import datetime, timedelta, timezone
 
@@ -76,6 +77,7 @@ def list_all_students(
 @router.patch("/enrollments/{enrollment_id}/unlock")
 def admin_unlock_enrollment(
     enrollment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -84,14 +86,24 @@ def admin_unlock_enrollment(
     Use when Paystack payment succeeded but webhook failed.
     Extends access by 90 days from now.
     """
-    from datetime import datetime, timedelta, timezone
-
     enrollment = db.query(Enrollment).filter(Enrollment.id == enrollment_id).first()
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
     enrollment.status = EnrollmentStatus.ACTIVE.value
     enrollment.access_expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+
+    user = db.query(User).filter(User.id == enrollment.user_id).first()
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="MANUAL_UNLOCK",
+        entity_type="Enrollment",
+        entity_id=enrollment_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"student_email": user.email if user else f"User #{enrollment.user_id}"},
+    )
 
     db.commit()
     db.refresh(enrollment)
@@ -105,6 +117,7 @@ def admin_unlock_enrollment(
 @router.patch("/enrollments/{enrollment_id}/force-lock")
 def admin_force_lock_enrollment(
     enrollment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -118,6 +131,19 @@ def admin_force_lock_enrollment(
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
     enrollment.status = EnrollmentStatus.LOCKED.value
+
+    user = db.query(User).filter(User.id == enrollment.user_id).first()
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="FORCE_LOCK",
+        entity_type="Enrollment",
+        entity_id=enrollment_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"student_email": user.email if user else f"User #{enrollment.user_id}"},
+    )
+
     db.commit()
     return {"status": "locked", "enrollment_id": enrollment.id}
 
@@ -125,6 +151,7 @@ def admin_force_lock_enrollment(
 @router.delete("/enrollments/{enrollment_id}/progress")
 def admin_reset_progress(
     enrollment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -139,5 +166,21 @@ def admin_reset_progress(
     deleted_count = (
         db.query(Progress).filter(Progress.enrollment_id == enrollment_id).delete()
     )
+
+    user = db.query(User).filter(User.id == enrollment.user_id).first()
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="RESET_PROGRESS",
+        entity_type="Enrollment",
+        entity_id=enrollment_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={
+            "student_email": user.email if user else f"User #{enrollment.user_id}",
+            "sections_cleared": deleted_count,
+        },
+    )
+
     db.commit()
     return {"status": "reset", "sections_cleared": deleted_count}

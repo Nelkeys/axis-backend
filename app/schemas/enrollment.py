@@ -1,15 +1,21 @@
 from pydantic import BaseModel
+from decimal import Decimal
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 class EnrollmentResponse(BaseModel):
     id: int
     course_id: int
-    course_version_id: int
+    course_version_id: int  # ADD THIS
     status: str
-    first_purchased_at: datetime
-    access_expires_at: datetime
     renewal_count: int
+    access_expires_at: Optional[datetime]
+    first_purchased_at: Optional[datetime]  
+    course_title: str
+    price: Decimal
+    renewal_price: Decimal
+    progress_percent: int
+    renewal_available: bool
 
     class Config:
         from_attributes = True

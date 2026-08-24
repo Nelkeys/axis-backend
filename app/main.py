@@ -2,6 +2,9 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app import models  # noqa: F401 — ensures all models are registered with Base
 from app.config import settings
 from app.core.dependencies import get_current_user
@@ -35,8 +38,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS — allow your frontend origin only
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
+# CORS — allow frontend origin only
 origins = [
     "http://localhost:5173",
     "https://axisedu-admin.onrender.com",

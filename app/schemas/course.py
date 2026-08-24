@@ -20,6 +20,7 @@ class CourseResponse(BaseModel):
     pass_percentage: int
     curriculum_tags: List[str]
     created_at: datetime
+    is_published: bool
 
     class Config:
         from_attributes = True

@@ -16,6 +16,9 @@ from app.schemas.content import (
     ProgressOverview,
     QuizAttemptHistoryItem,
     StudentCertificateResponse,
+    CurriculumResponse,
+    SectionWithProgress,
+    TopicWithProgress,
 )
 from app.services import enrollment_service
 
@@ -37,6 +40,87 @@ def _get_owned_enrollment(db: Session, enrollment_id: int, user: User) -> Enroll
     return enrollment
 
 
+def _enrich(db: Session, e: Enrollment) -> EnrollmentResponse:
+    """Builds the enriched enrollment shape used by both list and single endpoints."""
+    course = db.query(Course).filter(Course.id == e.course_id).first()
+    total = (
+        db.query(Section)
+        .join(Topic, Section.topic_id == Topic.id)
+        .filter(Topic.course_version_id == e.course_version_id)
+        .count()
+    )
+    done = db.query(Progress).filter(Progress.enrollment_id == e.id).count()
+    return EnrollmentResponse(
+        id=e.id,
+        course_id=e.course_id,
+        course_version_id=e.course_version_id,
+        status=e.status,
+        renewal_count=e.renewal_count,
+        access_expires_at=e.access_expires_at,
+        first_purchased_at=e.first_purchased_at,
+        course_title=course.title if course else "—",
+        price=course.price if course else 0,
+        renewal_price=course.renewal_price if course else 0,
+        progress_percent=round((done / total) * 100) if total else 0,
+        renewal_available=(
+            e.status == EnrollmentStatus.LOCKED.value and e.renewal_count == 0
+        ),
+    )
+
+
+@router.get("/{enrollment_id}/curriculum", response_model=CurriculumResponse)
+def get_curriculum_with_progress(
+    enrollment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full topic → section tree with completion marks for the course player sidebar."""
+    enrollment = _get_owned_enrollment(db, enrollment_id, current_user)
+
+    if enrollment.status not in (EnrollmentStatus.ACTIVE.value, EnrollmentStatus.COMPLETED.value):
+        raise HTTPException(status_code=403, detail="Course is locked — renew to continue")
+
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+
+    topics = (
+        db.query(Topic)
+        .filter(Topic.course_version_id == enrollment.course_version_id)
+        .order_by(Topic.order)
+        .all()
+    )
+
+    completed_section_ids = set(
+        p.section_id
+        for p in db.query(Progress.section_id).filter(Progress.enrollment_id == enrollment.id).all()
+    )
+
+    topics_with_progress = []
+    for topic in topics:
+        sections_with_progress = [
+            SectionWithProgress(
+                id=s.id,
+                title=s.title,
+                order=s.order,
+                completed=(s.id in completed_section_ids),
+            )
+            for s in sorted(topic.sections, key=lambda s: (s.order, s.id))
+        ]
+        topics_with_progress.append(
+            TopicWithProgress(
+                id=topic.id,
+                title=topic.title,
+                order=topic.order,
+                sections=sections_with_progress,
+            )
+        )
+
+    return CurriculumResponse(
+        enrollment_id=enrollment.id,
+        course_title=course.title if course else "—",
+        topics=topics_with_progress,
+    )
+
+
 # ============================================================
 # LIST (no path params — most specific)
 # ============================================================
@@ -46,7 +130,10 @@ def list_my_enrollments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    enrollments = (
+        db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    )
+    return [_enrich(db, e) for e in enrollments]
 
 
 # ============================================================
@@ -207,4 +294,5 @@ def get_enrollment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return _get_owned_enrollment(db, enrollment_id, current_user)
+    enrollment = _get_owned_enrollment(db, enrollment_id, current_user)
+    return _enrich(db, enrollment)

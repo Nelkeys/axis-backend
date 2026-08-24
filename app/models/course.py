@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, ARRAY, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Boolean, Numeric, ARRAY, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -13,6 +13,8 @@ class Course(Base):
     pass_percentage = Column(Integer, nullable=False, default=70)
     curriculum_tags = Column(ARRAY(String), nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    is_published = Column(Boolean, nullable=False, default=False, server_default="false")
 
     versions = relationship("CourseVersion", back_populates="course", cascade="all, delete-orphan")
     quiz = relationship("Quiz", back_populates="course", uselist=False, cascade="all, delete-orphan")

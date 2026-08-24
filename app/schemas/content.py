@@ -82,3 +82,31 @@ class StudentCertificateResponse(BaseModel):
 
 class TopicWithSectionsResponse(TopicResponse):
     sections: List[SectionResponse] = []
+
+
+
+class SectionWithProgress(BaseModel):
+    id: int
+    title: str
+    order: int
+    completed: bool
+
+    class Config:
+        from_attributes = True
+
+class TopicWithProgress(BaseModel):
+    id: int
+    title: str
+    order: int
+    sections: List[SectionWithProgress] = []
+
+    class Config:
+        from_attributes = True
+
+class CurriculumResponse(BaseModel):
+    enrollment_id: int
+    course_title: str
+    topics: List[TopicWithProgress]
+
+    class Config:
+        from_attributes = True

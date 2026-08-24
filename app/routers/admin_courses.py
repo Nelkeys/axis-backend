@@ -37,6 +37,20 @@ def create_course(
     return course
 
 
+@router.patch("/{course_id}/publish")
+def toggle_publish(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    course.is_published = not course.is_published
+    db.commit()
+    return {"id": course.id, "is_published": course.is_published}
+
+
 @router.get("", response_model=list[CourseResponse])
 def list_courses(
     db: Session = Depends(get_db),

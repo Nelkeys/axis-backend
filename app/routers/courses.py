@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
+from app.models.user import User
 from app.models.course import Course, CourseVersion
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.core.dependencies import get_current_user
@@ -13,9 +14,18 @@ router = APIRouter(prefix="/courses", tags=["Courses"])
 
 
 @router.get("", response_model=List[CourseListResponse])
-def list_courses(db: Session = Depends(get_db)):
-    """Public — anyone can browse."""
-    return db.query(Course).order_by(Course.created_at.desc()).all()
+def list_courses(
+    search: str = None,
+    tag: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query = db.query(Course).filter(Course.is_published == True)
+    if search:
+        query = query.filter(Course.title.ilike(f"%{search}%"))
+    if tag:
+        query = query.filter(Course.curriculum_tags.contains([tag]))
+    return query.order_by(Course.created_at.desc()).all()
 
 
 @router.get("/{course_id}", response_model=CourseDetailResponse)
@@ -26,7 +36,7 @@ def get_course_detail(
 ):
     """Authenticated — shows structure + enrollment status."""
     course = db.query(Course).filter(Course.id == course_id).first()
-    if not course:
+    if not course or not course.is_published:
         raise HTTPException(status_code=404, detail="Course not found")
 
     version = (
