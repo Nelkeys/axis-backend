@@ -19,3 +19,7 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
         status_code=429,
         content={"detail": f"Too many login attempts. Please try again later."},
     )
+
+
+
+
