@@ -20,7 +20,9 @@ from app.schemas.content import (
     SectionWithProgress,
     TopicWithProgress,
 )
+from fastapi.responses import Response
 from app.services import enrollment_service
+from app.services.certificate_service import render_certificate_pdf
 
 router = APIRouter(prefix="/enrollments", tags=["Enrollments"])
 
@@ -283,6 +285,36 @@ def get_my_certificate(
         issued_at=certificate.issued_at,
     )
 
+
+@router.get("/{enrollment_id}/certificate/pdf")
+def download_certificate_pdf(
+    enrollment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    enrollment = _get_owned_enrollment(db, enrollment_id, current_user)
+    certificate = (
+        db.query(Certificate).filter(Certificate.enrollment_id == enrollment.id).first()
+    )
+    if not certificate:
+        raise HTTPException(status_code=404, detail="No certificate earned yet")
+
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+
+    pdf_bytes = render_certificate_pdf(
+        name=getattr(current_user, "name", None) or current_user.email,
+        course_title=course.title,
+        score=certificate.score,
+        code=certificate.verification_code,
+        issued_date=certificate.issued_at,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="AXIS-{certificate.verification_code}.pdf"'
+        },
+    )
 
 # ============================================================
 # SINGLE ENROLLMENT (generic catch-all — MUST be last)

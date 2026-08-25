@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from sqlalchemy.orm import Session, joinedload
 from app.core.audit import log_audit
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
@@ -9,8 +9,9 @@ from app.models.admin import AdminUser
 from app.models.enrollment import Enrollment, EnrollmentStatus, Progress
 from app.models.user import User
 from app.models.course import Course
+from app.models.audit import AuditLog
 from app.core.dependencies import get_current_admin
-from app.schemas.admin import EnrollmentAdminResponse
+from app.schemas.admin import EnrollmentAdminResponse, AuditLogResponse
 
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 
@@ -94,6 +95,7 @@ def admin_unlock_enrollment(
     enrollment.access_expires_at = datetime.now(timezone.utc) + timedelta(days=90)
 
     user = db.query(User).filter(User.id == enrollment.user_id).first()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
 
     log_audit(
         db=db,
@@ -102,7 +104,10 @@ def admin_unlock_enrollment(
         entity_type="Enrollment",
         entity_id=enrollment_id,
         ip_address=request.client.host if request.client else "unknown",
-        details={"student_email": user.email if user else f"User #{enrollment.user_id}"},
+        details={
+            "student_email": user.email if user else f"User #{enrollment.user_id}",
+            "course_title": course.title if course else f"Course #{enrollment.course_id}",
+        },
     )
 
     db.commit()
@@ -133,6 +138,7 @@ def admin_force_lock_enrollment(
     enrollment.status = EnrollmentStatus.LOCKED.value
 
     user = db.query(User).filter(User.id == enrollment.user_id).first()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
 
     log_audit(
         db=db,
@@ -141,7 +147,10 @@ def admin_force_lock_enrollment(
         entity_type="Enrollment",
         entity_id=enrollment_id,
         ip_address=request.client.host if request.client else "unknown",
-        details={"student_email": user.email if user else f"User #{enrollment.user_id}"},
+        details={
+            "student_email": user.email if user else f"User #{enrollment.user_id}",
+            "course_title": course.title if course else f"Course #{enrollment.course_id}",
+        },
     )
 
     db.commit()
@@ -168,6 +177,7 @@ def admin_reset_progress(
     )
 
     user = db.query(User).filter(User.id == enrollment.user_id).first()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
 
     log_audit(
         db=db,
@@ -178,9 +188,56 @@ def admin_reset_progress(
         ip_address=request.client.host if request.client else "unknown",
         details={
             "student_email": user.email if user else f"User #{enrollment.user_id}",
+            "course_title": course.title if course else f"Course #{enrollment.course_id}",
             "sections_cleared": deleted_count,
         },
     )
 
     db.commit()
     return {"status": "reset", "sections_cleared": deleted_count}
+
+
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+def get_audit_logs(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    action: Optional[str] = Query(default=None),
+    entity_type: Optional[str] = Query(default=None),
+    admin_email: Optional[str] = Query(default=None),
+):
+    """
+    Retrieve audit logs with optional filtering.
+    Returns newest first, paginated.
+    """
+    query = db.query(AuditLog).options(joinedload(AuditLog.admin))
+
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+    if admin_email:
+        query = query.join(AdminUser).filter(AdminUser.email.ilike(f"%{admin_email}%"))
+
+    logs = (
+        query
+        .order_by(AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        AuditLogResponse(
+            id=log.id,
+            admin_email=log.admin.email if log.admin else None,
+            action=log.action,
+            entity_type=log.entity_type,
+            entity_id=log.entity_id,
+            ip_address=log.ip_address,
+            details=log.details,
+            created_at=log.created_at,
+        )
+        for log in logs
+    ]

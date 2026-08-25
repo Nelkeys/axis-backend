@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,6 +6,7 @@ from app.models.course import Course, CourseVersion
 from app.models.enrollment import Enrollment
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
+from app.core.audit import log_audit
 from app.schemas.course import CourseCreateRequest, CourseResponse
 from app.schemas.admin import CourseUpdateRequest
 
@@ -40,13 +41,26 @@ def create_course(
 @router.patch("/{course_id}/publish")
 def toggle_publish(
     course_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
     course = db.query(Course).filter(Course.id == course_id).first()
     if course is None:
         raise HTTPException(status_code=404, detail="Course not found")
+
     course.is_published = not course.is_published
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="PUBLISH_TOGGLE",
+        entity_type="Course",
+        entity_id=course.id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"title": course.title, "is_published": course.is_published},
+    )
+
     db.commit()
     return {"id": course.id, "is_published": course.is_published}
 
@@ -59,11 +73,11 @@ def list_courses(
     return db.query(Course).all()
 
 
-
 @router.patch("/{course_id}", response_model=CourseResponse)
 def update_course(
     course_id: int,
     data: CourseUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -71,6 +85,9 @@ def update_course(
     course = db.query(Course).filter(Course.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+
+    old_price = course.price
+    old_renewal = course.renewal_price
 
     if data.title is not None:
         course.title = data.title
@@ -85,6 +102,24 @@ def update_course(
     if data.curriculum_tags is not None:
         course.curriculum_tags = data.curriculum_tags
 
+    # Audit ONLY financial changes — title/description edits would flood the trail
+    if course.price != old_price or course.renewal_price != old_renewal:
+        log_audit(
+            db=db,
+            admin=current_admin,
+            action="PRICE_CHANGE",
+            entity_type="Course",
+            entity_id=course.id,
+            ip_address=request.client.host if request.client else "unknown",
+            details={
+                "title": course.title,
+                "old_price": float(old_price),
+                "new_price": float(course.price),
+                "old_renewal": float(old_renewal),
+                "new_renewal": float(course.renewal_price),
+            },
+        )
+
     db.commit()
     db.refresh(course)
     return course
@@ -93,19 +128,18 @@ def update_course(
 @router.delete("/{course_id}")
 def delete_course(
     course_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
     """
-    Soft-delete: prevents new enrollments by setting price to 0.
-    Hard-delete is dangerous because it would orphan enrollments,
+    Hard-delete is blocked when enrollments exist — it would orphan
     progress, payments, and certificates.
     """
     course = db.query(Course).filter(Course.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # Check if anyone is enrolled
     enrollment_count = (
         db.query(Enrollment).filter(Enrollment.course_id == course_id).count()
     )
@@ -114,6 +148,16 @@ def delete_course(
             status_code=400,
             detail=f"Cannot delete: {enrollment_count} students are enrolled. Disable the course instead.",
         )
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="DELETE_COURSE",
+        entity_type="Course",
+        entity_id=course.id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"title": course.title},  # captured before the row is gone
+    )
 
     db.delete(course)
     db.commit()

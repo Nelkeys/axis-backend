@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -34,6 +34,20 @@ class EnrollmentAdminResponse(BaseModel):
     status: str
     renewal_count: int
     access_expires_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    admin_email: Optional[str] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    ip_address: Optional[str] = None
+    details: Optional[dict] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True

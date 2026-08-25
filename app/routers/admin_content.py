@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,9 +6,10 @@ from app.models.course import Course, CourseVersion
 from app.models.content import Topic, Section
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
+from app.core.audit import log_audit
 from app.schemas.content import (
     TopicCreateRequest, TopicResponse,
-    SectionCreateRequest, SectionResponse, 
+    SectionCreateRequest, SectionResponse,
     TopicUpdateRequest, SectionUpdateRequest,
     TopicWithSectionsResponse,
 )
@@ -29,9 +30,6 @@ def create_topic(
     if course is None:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # Topics attach to the current (latest) CourseVersion — the one
-    # created automatically when the course was made, or the newest
-    # one if the course has since been re-versioned.
     version = (
         db.query(CourseVersion)
         .filter(CourseVersion.course_id == course_id)
@@ -64,7 +62,6 @@ def create_section(
         order=data.order,
         title=data.title,
         text_content=data.text_content,
-        
         video_url=data.video_url,
     )
     db.add(section)
@@ -91,7 +88,6 @@ def get_course_topics(
     return db.query(Topic).filter(Topic.course_version_id == version.id).order_by(Topic.order).all()
 
 
-
 @router.patch("/topics/{topic_id}", response_model=TopicResponse)
 def update_topic(
     topic_id: int,
@@ -116,6 +112,7 @@ def update_topic(
 @router.delete("/topics/{topic_id}")
 def delete_topic(
     topic_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -123,13 +120,22 @@ def delete_topic(
     if topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    # Deleting a topic orphans its sections — check for that first.
     section_count = db.query(Section).filter(Section.topic_id == topic_id).count()
     if section_count > 0:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot delete: this topic has {section_count} section(s). Delete them first.",
         )
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="DELETE_TOPIC",
+        entity_type="Topic",
+        entity_id=topic_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"title": topic.title},
+    )
 
     db.delete(topic)
     db.commit()
@@ -164,6 +170,7 @@ def update_section(
 @router.delete("/sections/{section_id}")
 def delete_section(
     section_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -171,15 +178,22 @@ def delete_section(
     if section is None:
         raise HTTPException(status_code=404, detail="Section not found")
 
-    # Check if any student has already completed this section before deleting.
-    # The DB foreign key would block this anyway, but we want a clean 400
-    # instead of a raw 500 from a ForeignKeyViolation.
     progress_count = db.query(Progress).filter(Progress.section_id == section_id).count()
     if progress_count > 0:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot delete: {progress_count} student(s) have completed this section. Edit it instead of deleting.",
         )
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="DELETE_SECTION",
+        entity_type="Section",
+        entity_id=section_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"title": section.title},
+    )
 
     db.delete(section)
     db.commit()

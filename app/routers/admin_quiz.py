@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,6 +6,7 @@ from app.models.course import Course
 from app.models.quiz import Quiz, Question
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
+from app.core.audit import log_audit
 from app.schemas.quiz import QuizCreateRequest, QuestionCreateRequest, QuestionAdminResponse, QuizAdminDetailResponse
 from app.schemas.admin import QuestionUpdateRequest, QuizUpdateRequest
 
@@ -150,7 +151,6 @@ def update_question(
     if data.options is not None:
         question.options = data.options
     if data.correct_index is not None:
-        # Validate against options if options are also being updated
         options = data.options if data.options is not None else question.options
         if data.correct_index >= len(options):
             raise HTTPException(status_code=400, detail="correct_index out of range")
@@ -164,6 +164,7 @@ def update_question(
 @router.delete("/questions/{question_id}")
 def delete_question(
     question_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(get_current_admin),
 ):
@@ -171,6 +172,16 @@ def delete_question(
     question = db.query(Question).filter(Question.id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    log_audit(
+        db=db,
+        admin=current_admin,
+        action="DELETE_QUESTION",
+        entity_type="Question",
+        entity_id=question_id,
+        ip_address=request.client.host if request.client else "unknown",
+        details={"text": question.text[:100]},
+    )
 
     db.delete(question)
     db.commit()

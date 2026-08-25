@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.admin import AdminUser
 from app.core.security import verify_password, create_admin_token
+from app.core.audit import log_audit
 from app.config import settings
 
 from app.core.dependencies import get_current_admin
@@ -19,24 +20,45 @@ class AdminLoginRequest(BaseModel):
 @router.post("/login")
 @limiter.limit("5/minute")
 def admin_login(request: Request, data: AdminLoginRequest, response: Response, db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
     admin = db.query(AdminUser).filter(AdminUser.email == data.email).first()
 
     # Deliberately identical error for "no such admin" and "wrong password" —
     # never reveal which one it was, that's an account-enumeration leak.
     if admin is None or not verify_password(data.password, admin.password_hash):
+        log_audit(
+            db=db,
+            admin=None,  # unknown/invalid account — admin_id is nullable
+            action="ADMIN_LOGIN_FAILED",
+            entity_type="AdminUser",
+            entity_id=None,
+            ip_address=ip,
+            details={"email": data.email},
+        )
+        db.commit()
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    log_audit(
+        db=db,
+        admin=admin,
+        action="ADMIN_LOGIN_SUCCESS",
+        entity_type="AdminUser",
+        entity_id=admin.id,
+        ip_address=ip,
+    )
+    db.commit()
 
     token = create_admin_token(admin.id)
     response.set_cookie(
         key="admin_token",
         value=token,
         httponly=True,
-        secure=True,  # required whenever samesite="none" — no dev/prod branching needed since Render is always https
+        secure=True,
         samesite="none",
         max_age=60 * 60 * 8,
     )
     return {"status": "logged in"}
-    
+
 
 @router.get("/me")
 def get_current_admin_session(current_admin: AdminUser = Depends(get_current_admin)):

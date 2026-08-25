@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5500"
     paystack_secret_key: str
     cron_secret_key: str
+    redis_url: str
+    brevo_login: str
+    brevo_smtp_key: str
+    email_sender: str
 
     class Config:
         env_file = ".env"
