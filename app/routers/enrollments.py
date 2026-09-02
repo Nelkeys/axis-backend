@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models.user import User
@@ -23,6 +24,7 @@ from app.schemas.content import (
 from fastapi.responses import Response
 from app.services import enrollment_service
 from app.services.certificate_service import render_certificate_pdf
+from app.services.video_service import generate_signed_video_url
 
 router = APIRouter(prefix="/enrollments", tags=["Enrollments"])
 
@@ -328,3 +330,36 @@ def get_enrollment(
 ):
     enrollment = _get_owned_enrollment(db, enrollment_id, current_user)
     return _enrich(db, enrollment)
+
+
+
+@router.get("/{enrollment_id}/sections/{section_id}/video")
+def get_section_video(
+    enrollment_id: int,
+    section_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 1. Enrollment must belong to this user AND be active
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.id == enrollment_id,
+        Enrollment.user_id == current_user.id,
+        Enrollment.status == EnrollmentStatus.ACTIVE.value,
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # 2. Access must not be expired
+    if enrollment.access_expires_at and enrollment.access_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=403, detail="Access expired")
+
+    # 3. Section must exist and have a video
+    section = db.query(Section).filter(Section.id == section_id).first()
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    if not section.video_public_id:
+        raise HTTPException(status_code=404, detail="This section has no video")
+
+    # 4. Return a signed URL that expires in 1 hour
+    video_url = generate_signed_video_url(section.video_public_id, expires_in_seconds=300)
+    return {"video_url": video_url}

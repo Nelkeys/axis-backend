@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.enrollment import Enrollment
-from app.models.quiz import Quiz, Question
+from app.models.quiz import Quiz, Question, AnswerLog
+from app.models.quiz_attempt import QuizAttempt
 from app.core.dependencies import get_current_user
 from app.schemas.quiz import (
     QuizStartResponse, 
@@ -67,3 +68,52 @@ def submit_quiz(
     enrollment = _get_owned_enrollment(db, enrollment_id, current_user)
     result = quiz_service.submit_quiz(db, enrollment, attempt_id, data.answers)
     return QuizSubmitResponse(**result)
+
+
+
+
+@router.get("/{enrollment_id}/quiz/{attempt_id}/review")
+def review_quiz_attempt(
+    enrollment_id: int,
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return a detailed review of a specific quiz attempt."""
+    # 1. Verify enrollment belongs to user
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.id == enrollment_id,
+        Enrollment.user_id == current_user.id,
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+
+    # 2. Verify attempt belongs to this specific enrollment
+    attempt = db.query(QuizAttempt).filter(
+        QuizAttempt.id == attempt_id,
+        QuizAttempt.enrollment_id == enrollment.id,
+    ).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found or access denied")
+
+    # 3. Fetch logs joined with question data
+    logs = (
+        db.query(AnswerLog, Question)
+        .join(Question, AnswerLog.question_id == Question.id)
+        .filter(AnswerLog.attempt_id == attempt_id)
+        .order_by(Question.id) # Or order by question order if available
+        .all()
+    )
+
+    review_data = []
+    for log, question in logs:
+        review_data.append({
+            "question_id": question.id,
+            "question_text": question.text,
+            "options": question.options,
+            "selected_index": log.selected_index,
+            "correct_index": question.correct_index,
+            "is_correct": log.is_correct,
+        })
+
+    return {"attempt_id": attempt_id, "answers": review_data}

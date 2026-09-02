@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -7,6 +7,7 @@ from app.models.content import Topic, Section
 from app.models.admin import AdminUser
 from app.core.dependencies import get_current_admin
 from app.core.audit import log_audit
+from app.services.video_service import upload_video_to_cloudinary
 from app.schemas.content import (
     TopicCreateRequest, TopicResponse,
     SectionCreateRequest, SectionResponse,
@@ -63,6 +64,7 @@ def create_section(
         title=data.title,
         text_content=data.text_content,
         video_url=data.video_url,
+        video_public_id=data.video_public_id,
     )
     db.add(section)
     db.commit()
@@ -161,6 +163,8 @@ def update_section(
         section.text_content = data.text_content
     if data.video_url is not None:
         section.video_url = data.video_url
+    if data.video_public_id is not None:
+        section.video_public_id = data.video_public_id
 
     db.commit()
     db.refresh(section)
@@ -198,3 +202,26 @@ def delete_section(
     db.delete(section)
     db.commit()
     return {"status": "deleted", "section_id": section_id}
+
+
+@router.post("/upload/video")
+def upload_video(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(get_current_admin),
+):
+    """
+    Admin uploads a video file. It's stored in Cloudinary (authenticated).
+    Returns the public_id, which the admin frontend pastes into the section form.
+    """
+    if not file.content_type or not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="File must be a video")
+
+    result = upload_video_to_cloudinary(file.file)
+
+    return {
+        "public_id": result["public_id"],
+        "duration": result.get("duration"),
+        "bytes": result.get("bytes"),
+        "format": result.get("format"),
+    }

@@ -144,8 +144,9 @@ def process_payment_action(
     user_id: int, 
     course_id: int, 
     action_type: str, 
-    amount_paid: float, # Passed as float from the webhook router
-    reference: str
+    amount_paid: float,
+    reference: str,
+    coins_applied: int = 0,
 ):
     """
     Dispatcher called by the Paystack webhook.
@@ -155,27 +156,30 @@ def process_payment_action(
     if not course:
         raise ValueError("Course not found")
 
-    # 1. STRICT AMOUNT VERIFICATION
-    # Convert the float amount_paid back to Decimal for safe currency comparison
     paid_decimal = Decimal(str(amount_paid))
 
+    # Determine the expected full price for this action
     if action_type == "new":
-        if paid_decimal != course.price:
-            raise ValueError(f"New enrollment amount mismatch. Expected {course.price}, got {paid_decimal}")
+        expected = course.price
     elif action_type == "renew":
-        if paid_decimal != course.renewal_price:
-            raise ValueError(f"Renewal amount mismatch. Expected {course.renewal_price}, got {paid_decimal}")
+        expected = course.renewal_price
     elif action_type == "repurchase":
-        if paid_decimal != course.price:
-            raise ValueError(f"Repurchase amount mismatch. Expected {course.price}, got {paid_decimal}")
+        expected = course.price
     else:
         raise ValueError(f"Unknown action type: {action_type}")
 
-    # 2. DISPATCH TO STATE MACHINE
+    # Total value delivered = cash paid via Paystack + coins applied
+    total_paid = paid_decimal + Decimal(str(coins_applied))
+    if total_paid != expected:
+        raise ValueError(
+            f"Amount mismatch for '{action_type}'. "
+            f"Expected {expected}, got {total_paid} "
+            f"(cash: {paid_decimal}, coins: {coins_applied})"
+        )
+
+    # DISPATCH TO STATE MACHINE
     if action_type == "new":
-        # create_enrollment will raise HTTPException(409) if they already have an enrollment
         create_enrollment(db, user_id, course_id)
-        
     elif action_type in ("renew", "repurchase"):
         existing_enrollment = (
             db.query(Enrollment)
@@ -184,10 +188,7 @@ def process_payment_action(
         )
         if not existing_enrollment:
             raise ValueError("No existing enrollment found to renew or repurchase")
-            
         if action_type == "renew":
-            # raises HTTPException(400) if state/renewal_count is invalid
             renew_enrollment(db, existing_enrollment)
         else:
-            # raises HTTPException(400) if state is invalid
             repurchase_enrollment(db, existing_enrollment)

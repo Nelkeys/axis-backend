@@ -22,6 +22,7 @@ class Section(Base):
     order = Column(Integer, nullable=False)
     title = Column(String, nullable=False)
     text_content = Column(Text, nullable=False)
-    video_url = Column(String, nullable=True)  # optional, as decided
+    video_url = Column(String, nullable=True)
+    video_public_id = Column(String, nullable=True)
 
     topic = relationship("Topic", back_populates="sections")

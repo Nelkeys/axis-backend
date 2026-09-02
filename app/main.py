@@ -19,12 +19,15 @@ from app.routers import (
     profile,
     notifications,
     certificates,
+    partner,
+    student_wallet,
     # Admin-facing
     admin_auth,
     admin_courses,
     admin_content,
     admin_quiz,
     admin_dashboard,
+    admin_referrals,
     # System
     webhooks,
     cron,
@@ -68,6 +71,8 @@ STUDENT_ROUTERS = [
     profile.router,
     notifications.router,
     certificates.router,
+    partner.router,
+    student_wallet.router,
 ]
 
 # Admin-facing routes
@@ -77,6 +82,7 @@ ADMIN_ROUTERS = [
     admin_content.router,
     admin_quiz.router,
     admin_dashboard.router,
+    admin_referrals.router,
 ]
 
 # System routes (webhooks, cron)

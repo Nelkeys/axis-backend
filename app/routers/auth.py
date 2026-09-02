@@ -1,3 +1,4 @@
+import secrets
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from fastapi.responses import RedirectResponse
@@ -16,21 +17,33 @@ workos_client = workos.WorkOSClient(
     client_id=settings.workos_client_id,
 )
 
+
+def _generate_referral_code() -> str:
+    return "RVN" + secrets.token_hex(3).upper()
+
+
 @router.get("/login")
-def login():
+def login(ref: str = None):
+    # Pack the referral code into OAuth state so it survives the WorkOS redirect
+    state = f"ref:{ref}" if ref else None
+
     authorization_url = workos_client.user_management.get_authorization_url(
         provider="authkit",
         redirect_uri=settings.workos_redirect_uri,
+        state=state,
     )
     return RedirectResponse(authorization_url)
 
 
 @router.get("/callback")
-def callback(code: str, db: Session = Depends(get_db)):
+def callback(code: str, state: str = None, db: Session = Depends(get_db)):
+    # Extract referral code from the OAuth state
+    ref_code = None
+    if state and state.startswith("ref:"):
+        ref_code = state.split("ref:", 1)[1]
+
     try:
-        auth_response = workos_client.user_management.authenticate_with_code(
-            code=code,
-        )
+        auth_response = workos_client.user_management.authenticate_with_code(code=code)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired login code")
 
@@ -38,10 +51,20 @@ def callback(code: str, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.workos_user_id == workos_user.id).first()
     if user is None:
+        # ── REFERRAL CAPTURE ──────────────────────────────
+        referrer_id = None
+        if ref_code:
+            referrer = db.query(User).filter(User.referral_code == ref_code).first()
+            if referrer:
+                referrer_id = referrer.id
+        # ───────────────────────────────────────────────────
+
         user = User(
             workos_user_id=workos_user.id,
             email=workos_user.email,
             email_verified=workos_user.email_verified,
+            referral_code=_generate_referral_code(),
+            referred_by=referrer_id,
         )
         db.add(user)
         db.commit()
@@ -54,7 +77,6 @@ def callback(code: str, db: Session = Depends(get_db)):
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
 
-    # matches your test-frontend/success.html
     response = RedirectResponse(url=f"{settings.frontend_url}/success.html")
     response.set_cookie(
         key="refresh_token",
@@ -73,7 +95,6 @@ def callback(code: str, db: Session = Depends(get_db)):
         max_age=60 * 15,
     )
     return response
-
 
 
 @router.post("/refresh")

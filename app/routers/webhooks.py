@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
 from app.models.payment import PaystackEventLog
-from app.services.enrollment_service import process_payment_action # We'll define this below
+from app.services.enrollment_service import process_payment_action
+from app.models.user import User
+from app.models.referral import CoinEntry
+from app.services.referral_service import grant_referral_reward
 
 router = APIRouter(tags=["Webhooks"])
 
@@ -73,6 +76,8 @@ async def paystack_webhook(
     if not all([user_id, course_id, action_type]):
         return {"status": "error", "message": "missing metadata"}
 
+    coins_applied = int(metadata.get("coins_applied", 0) or 0)
+
     # 6. Dispatch to Enrollment Service
     try:
         process_payment_action(
@@ -81,7 +86,8 @@ async def paystack_webhook(
             course_id=int(course_id),
             action_type=action_type,
             amount_paid=amount_paid_naira,
-            reference=data.get("reference")
+            reference=data.get("reference"),
+            coins_applied=coins_applied,
         )
     except HTTPException as e:
         # Business logic rejection (e.g., 409 Already Enrolled, 400 Invalid State)
@@ -97,6 +103,28 @@ async def paystack_webhook(
         # Unexpected error (e.g., DB connection dropped)
         # Raise 500 so Paystack knows it failed and retries later
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+        # ── COIN & REFERRAL ENGINE ──────────────────────────────
+    # 1. Deduct coins that were applied at checkout
+    if coins_applied > 0:
+        db.add(CoinEntry(
+            user_id=int(user_id),
+            amount=-coins_applied,
+            type="CHECKOUT_SPEND",
+            reference=data.get("reference"),
+        ))
+
+    # 2. Grant referral reward to whoever invited this buyer
+    payer = db.query(User).filter(User.id == int(user_id)).first()
+    if payer:
+        grant_referral_reward(
+            db=db,
+            payer=payer,
+            amount_paid_naira=amount_paid_naira,
+            reference=data.get("reference"),
+        )
+    # ─────────────────────────────────────────────────────────
+
 
     # 7. Log the successful processing to guarantee idempotency
     log_entry = PaystackEventLog(

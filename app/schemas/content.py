@@ -25,6 +25,7 @@ class SectionUpdateRequest(BaseModel):
     order: Optional[int] = Field(None, ge=1)
     text_content: Optional[str] = Field(None, min_length=10)
     video_url: Optional[str] = None
+    video_public_id: Optional[str] = None
 
 
 class SectionCreateRequest(BaseModel):
@@ -32,6 +33,7 @@ class SectionCreateRequest(BaseModel):
     order: int = Field(..., ge=1)
     text_content: str = Field(..., min_length=10)
     video_url: Optional[str] = None
+    video_public_id: Optional[str] = None
 
 class SectionResponse(BaseModel):
     id: int
