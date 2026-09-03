@@ -28,6 +28,7 @@ from app.routers import (
     admin_quiz,
     admin_dashboard,
     admin_referrals,
+    admin_analytics,
     # System
     webhooks,
     cron,
@@ -83,6 +84,7 @@ ADMIN_ROUTERS = [
     admin_quiz.router,
     admin_dashboard.router,
     admin_referrals.router,
+    admin_analytics.router,
 ]
 
 # System routes (webhooks, cron)

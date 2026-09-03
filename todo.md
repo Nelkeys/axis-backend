@@ -10,8 +10,6 @@ Done - Payments — Paystack integration, webhook signature verification, idempo
 
 Done - Assessment & certificates — quiz endpoints (start/submit with the time-limit rule), server-side scoring, certificate issuance on pass.
 
-
-
 Done - Wallet / coin balance
 Done - My referral code + invitees
 Done - Redeem partner invite → become partner
@@ -20,15 +18,14 @@ Done - Admin: generate partner invite codes
 Done - Admin: Approve payouts
 Done - Coin spend at payment initialize
 
+Done - Wire webhook reward granting — Call grant_referral_reward + coin deduction inside POST /webhooks/paystack on charge.success
 
-Wire webhook reward granting — Call grant_referral_reward + coin deduction inside POST /webhooks/paystack on charge.success
+Done - Capture referral code during WorkOS callback — Read ?ref=XXXX from /auth/callback URL and save to user.referred_by
 
-Capture referral code during WorkOS callback — Read ?ref=XXXX from /auth/callback URL and save to user.referred_by
+Done - Student coin history endpoint — GET /wallet/coin-history returns the signed ledger (earned from referrals, spent at checkout)
 
-Student coin history endpoint — GET /wallet/coin-history returns the signed ledger (earned from referrals, spent at checkout)
+Done - Student invitees list — GET /wallet/invitees shows who they referred + their payment status
 
-Student invitees list — GET /wallet/invitees shows who they referred + their payment status
+Done - AnswerLog storage + endpoint — Store every quiz answer attempt ({attempt_id, question_id, selected_index, correct}) so students can review what they got wrong
 
-AnswerLog storage + endpoint — Store every quiz answer attempt ({attempt_id, question_id, selected_index, correct}) so students can review what they got wrong
-
-Admin analytics endpoint — GET /admin/analytics returns attach rate, completion %, referral share, CAC per partner
+Done - Admin analytics endpoint — GET /admin/analytics returns attach rate, completion %, referral share, CAC per partner

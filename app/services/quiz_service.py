@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from app.models.quiz import Quiz, Question
+from app.models.quiz import Quiz, Question, AnswerLog
 from app.models.quiz_attempt import QuizAttempt, Certificate, AttemptStatus
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.course import Course
@@ -74,13 +74,32 @@ def submit_quiz(db: Session, enrollment: Enrollment, attempt_id: int, answers: l
         db.commit()
         raise HTTPException(status_code=403, detail="Course locked during attempt — renew to retry")
 
-    questions = {q.id: q for q in db.query(Question).filter(Question.quiz_id == quiz.id).all()}
+        questions = {q.id: q for q in db.query(Question).filter(Question.quiz_id == quiz.id).all()}
     submitted = {a.question_id: a.selected_index for a in answers}
 
     correct_count = 0
+
+    # --- ANSWER LOGGING ---
+    # Safety net: clear any existing logs for this attempt (prevents duplicates if somehow resubmitted)
+    db.query(AnswerLog).filter(AnswerLog.attempt_id == attempt.id).delete()
+
     for qid, question in questions.items():
-        if submitted.get(qid) == question.correct_index:
-            correct_count += 1
+        selected = submitted.get(qid)
+        is_correct = False
+        
+        if selected is not None:
+            is_correct = (selected == question.correct_index)
+            if is_correct:
+                correct_count += 1
+                
+        # Log the answer
+        log = AnswerLog(
+            attempt_id=attempt.id,
+            question_id=qid,
+            selected_index=selected if selected is not None else -1,
+            is_correct=is_correct,
+        )
+        db.add(log)
 
     score = round((correct_count / len(questions)) * 100) if questions else 0
 
