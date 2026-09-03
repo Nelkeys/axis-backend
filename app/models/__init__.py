@@ -7,3 +7,4 @@ from app.models.quiz import Quiz, Question, AnswerLog
 from app.models.quiz_attempt import QuizAttempt, Certificate
 from app.models.notification import Notification
 from app.models.referral import Partner, PartnerInvite, CoinEntry, PartnerEarning, PayoutRequest
+from app.models.audit import AuditLog

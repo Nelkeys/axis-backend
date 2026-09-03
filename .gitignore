@@ -39,6 +39,6 @@ wheels/
 
 # --- TESTING & LOCAL FILES ---
 .pytest_cache/
-test_webhook.py
+create_admin.py
 *.log
 scripts/

@@ -37,8 +37,8 @@ from app.routers import (
 # APP INITIALIZATION
 
 app = FastAPI(
-    title="AxisEdu API",
-    description="Backend for the AxisEdu learning platform",
+    title="Kalon Learn API",
+    description="Backend for the Kalon Learn",
     version="1.0.0",
 )
 
